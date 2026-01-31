@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR Geburtstagsgeschenk</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #000;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 16px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        #startButton {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            font-size: 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 200;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        #startButton:hover {
+            background: #45a049;
+        }
+        
+        #vrButton {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 100;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        #vrButton:hover {
+            background: #0b7dda;
+        }
+    </style>
+<script type="text/javascript" nonce="4df8367d4fa94b19a7f3c5d0e34" src="//local.adguard.org?ts=1769876600521&amp;type=content-script&amp;dmn=ppl-ai-code-interpreter-files.s3.amazonaws.com&amp;url=https%3A%2F%2Fppl-ai-code-interpreter-files.s3.amazonaws.com%2Fweb%2Fdirect-files%2F1b355639af976c24fb80bb6cf4a74fce%2Fc3629885-8083-4f70-9d79-0d31e7a23bab%2Fcanvas-app%2Findex.html%3Fresponse-content-disposition%3Dattachment%253B%2520filename%253DVR%2520Birthday%2520Gift.html%253B%2520filename%252A%253DUTF-8%2527%2527VR%252520Birthday%252520Gift.html%26AWSAccessKeyId%3DASIA2F3EMEYEQ5Y76QR6%26Signature%3DId0vLhINeDHHVSdQuVZsgDRLofU%253D%26x-amz-security-token%3DIQoJb3JpZ2luX2VjEPH%252F%252F%252F%252F%252F%252F%252F%252F%252F%252FwEaCXVzLWVhc3QtMSJGMEQCIEtEF2keUyPqWahOWgfWehvL1ow6jYTmBYTPr2f5U351AiBD0ostvCs%252FqXw03p9Ueq3%252B06ckXfFEO%252FPVlRnZEpLQBCr8BAi6%252F%252F%252F%252F%252F%252F%252F%252F%252F%252F8BEAEaDDY5OTc1MzMwOTcwNSIM0cLJP2QN%252Ba2dqZzvKtAEon47eIGUfov6J%252FDY4o190Jl6FBAMd2n8lAR6uZBRtcuBlhABOTNzMMnEEDSrdmcbpS5OOG15KB%252FY48ftjv8FZSu45DInS%252FVN2IBocNNNDfT0J%252FdztH2%252FNGEsWdoQL%252B8hqgjMfSjKRAvGb766EAjdQcGJClizjdpSqlGeiTMnW3dyZyWvxFQW2xMr1HXKivbb58DvIMCeIhiw5JR0jC%252B8FBrNWV7tJM0ouVNReMVJbqgM20Xzh8v0%252BK9DHG9%252FeL%252FDn9bpnso5FzyWn2sFHUXytlHvx30LgWq%252FpfYGE06CCY%252BF%252F2jmN8nvg2aQR6xY95QBBTSoJyXrWxtz8GS7kBUkKqNKLKqrv7yaIuIsFyvrPzxBjE3eC71Wo2rzX3qzkNfVOvGOGM34ZZW54q1%252F6%252BYGoIzNJXjnOTycod3B0NIiWXyyUt3e4tnj5fRq7IkvQ8C0V0ylSj1hCRXT%252FKSkGA3j61YYn8tTRhEhy5G6UU6Ql8mymcuRKHb0gTbCb8XHwfY5YeTYIxAiGhN9Tho9PMnebOO97LUymVSVcfHjwaFNdjmu6orPxlmHPstzk%252BdLLo7Ao%252BEmPQymAYBtYeOhaXh7I1jQOo2Akdjula8tdAj6t8Ux4gbCGuTQjmC%252FX%252BhFoE8ae3NBxyUhlg6mTQV8FSEmoJUQBJt4fNC7mnDj1plHTXdiAj6ei2Nr7gkA7IThZB%252BCFAbRWJUAI%252F3eqAuPljLHpmtBH9wJUCwuXAtGpMCS%252B9lGQuo1ejnBc3zB5JQ60joGoW20KJN1mn6uc8G6PyYvKDDr6%252FjLBjqZAXPaO%252BKfG5WHmROfMX7rByEd2rrgCPEmgmNruITjF9Cr8h3%252BoJc3OTXk68kSEz0InlRHauN8gpbTyreu5UYVA9kCn2H5O6d23v1TuccqTjgViyBEoqyYn194XgpvFMAu94zrESAvPo8AtVHkE04Qy0mvEevGVQMlhoFbF2jO6KFfld58gZtfR96aQIS6FvgL4XMpnuGYMum%252FZQ%253D%253D%26Expires%3D1769879734&amp;app=firefox.exe&amp;css=3&amp;js=1&amp;rel=1&amp;rji=1&amp;sbe=0"></script><script type="text/javascript" nonce="4df8367d4fa94b19a7f3c5d0e34" src="//local.adguard.org?ts=1769876600521&amp;name=AdGuard%20Extra&amp;name=AdGuard%20Popup%20Blocker&amp;type=user-script"></script></head>
+<body>
+    <div id="info">Schaue dich um und bewege dich zur Tür!</div>
+    <button id="startButton">Erlebnis starten</button>
+    <button id="vrButton">VR-Modus starten</button>
+    
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+        
+        let scene, camera, renderer, reticle;
+        let house, giftBox, giftBoxLid, table;
+        let isInside = false;
+        let boxOpened = false;
+        let vrSupported = false;
+        
+        const startButton = document.getElementById('startButton');
+        const vrButton = document.getElementById('vrButton');
+        const info = document.getElementById('info');
+        
+        startButton.addEventListener('click', init);
+        
+        async function init() {
+            startButton.style.display = 'none';
+            
+            // Check WebXR support
+            if (navigator.xr) {
+                vrSupported = await navigator.xr.isSessionSupported('immersive-vr');
+            }
+            
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 10, 50);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.6, 10);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            
+            // VR Button
+            if (vrSupported) {
+                const vrBtn = VRButton.createButton(renderer);
+                vrBtn.style.bottom = '20px';
+                vrBtn.style.left = '50%';
+                vrBtn.style.transform = 'translateX(-50%)';
+                document.body.appendChild(vrBtn);
+                info.textContent = 'Starte den VR-Modus und schaue dich um!';
+            } else {
+                vrButton.style.display = 'block';
+                vrButton.textContent = 'VR nicht verfügbar - Desktop-Modus';
+                info.textContent = 'Nutze Maus/Touch zum Umschauen';
+            }
+            
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const sunLight = new THREE.DirectionalLight(0xffffcc, 0.8);
+            sunLight.position.set(5, 10, 5);
+            sunLight.castShadow = true;
+            sunLight.shadow.camera.left = -20;
+            sunLight.shadow.camera.right = 20;
+            sunLight.shadow.camera.top = 20;
+            sunLight.shadow.camera.bottom = -20;
+            scene.add(sunLight);
+            
+            createGround();
+            createHouse();
+            createInterior();
+            createReticle();
+            
+            // Controls for non-VR
+            let isPointerLocked = false;
+            let mouseX = 0, mouseY = 0;
+            
+            renderer.domElement.addEventListener('click', () => {
+                if (!renderer.xr.isPresenting) {
+                    renderer.domElement.requestPointerLock = renderer.domElement.requestPointerLock || renderer.domElement.mozRequestPointerLock;
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+            
+            document.addEventListener('pointerlockchange', () => {
+                isPointerLocked = document.pointerLockElement === renderer.domElement;
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (isPointerLocked) {
+                    mouseX += e.movementX * 0.002;
+                    mouseY -= e.movementY * 0.002;
+                    mouseY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseY));
+                }
+            });
+            
+            // Touch controls
+            let touchStartX = 0, touchStartY = 0;
+            renderer.domElement.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            });
+            
+            renderer.domElement.addEventListener('touchmove', (e) => {
+                const deltaX = e.touches[0].clientX - touchStartX;
+                const deltaY = e.touches[0].clientY - touchStartY;
+                mouseX += deltaX * 0.005;
+                mouseY -= deltaY * 0.005;
+                mouseY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseY));
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            });
+            
+            // Keyboard movement
+            const keys = {};
+            document.addEventListener('keydown', (e) => keys[e.key] = true);
+            document.addEventListener('keyup', (e) => keys[e.key] = false);
+            
+            // Animation loop
+            renderer.setAnimationLoop(() => {
+                // Non-VR camera control
+                if (!renderer.xr.isPresenting) {
+                    camera.rotation.order = 'YXZ';
+                    camera.rotation.y = mouseX;
+                    camera.rotation.x = mouseY;
+                    
+                    // Movement
+                    const speed = 0.1;
+                    const forward = new THREE.Vector3();
+                    camera.getWorldDirection(forward);
+                    forward.y = 0;
+                    forward.normalize();
+                    
+                    if (keys['w'] || keys['ArrowUp']) {
+                        camera.position.add(forward.multiplyScalar(speed));
+                    }
+                    if (keys['s'] || keys['ArrowDown']) {
+                        camera.position.sub(forward.multiplyScalar(speed));
+                    }
+                }
+                
+                updateReticle();
+                checkInteractions();
+                
+                if (giftBox && !boxOpened) {
+                    giftBox.rotation.y += 0.01;
+                }
+                
+                renderer.render(scene, camera);
+            });
+            
+            window.addEventListener('resize', onWindowResize);
+        }
+        
+        function createGround() {
+            const groundGeometry = new THREE.PlaneGeometry(50, 50);
+            const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+        }
+        
+        function createHouse() {
+            const houseGroup = new THREE.Group();
+            
+            // Walls
+            const wallMaterial = new THREE.MeshLambertMaterial({ color: 0xE8DCC5 });
+            
+            // Front wall with door opening
+            const frontWallLeft = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 3, 0.2),
+                wallMaterial
+            );
+            frontWallLeft.position.set(-2.25, 1.5, 5);
+            frontWallLeft.castShadow = true;
+            houseGroup.add(frontWallLeft);
+            
+            const frontWallRight = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 3, 0.2),
+                wallMaterial
+            );
+            frontWallRight.position.set(2.25, 1.5, 5);
+            frontWallRight.castShadow = true;
+            houseGroup.add(frontWallRight);
+            
+            const frontWallTop = new THREE.Mesh(
+                new THREE.BoxGeometry(2, 1, 0.2),
+                wallMaterial
+            );
+            frontWallTop.position.set(0, 2.5, 5);
+            frontWallTop.castShadow = true;
+            houseGroup.add(frontWallTop);
+            
+            // Back wall
+            const backWall = new THREE.Mesh(
+                new THREE.BoxGeometry(6, 3, 0.2),
+                wallMaterial
+            );
+            backWall.position.set(0, 1.5, -5);
+            backWall.castShadow = true;
+            houseGroup.add(backWall);
+            
+            // Side walls
+            const leftWall = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 3, 10),
+                wallMaterial
+            );
+            leftWall.position.set(-3, 1.5, 0);
+            leftWall.castShadow = true;
+            houseGroup.add(leftWall);
+            
+            const rightWall = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 3, 10),
+                wallMaterial
+            );
+            rightWall.position.set(3, 1.5, 0);
+            rightWall.castShadow = true;
+            houseGroup.add(rightWall);
+            
+            // Roof
+            const roofGeometry = new THREE.ConeGeometry(5, 2, 4);
+            const roofMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+            roof.position.set(0, 4, 0);
+            roof.rotation.y = Math.PI / 4;
+            roof.castShadow = true;
+            houseGroup.add(roof);
+            
+            // Door frame
+            const doorFrameMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            const doorFrame = new THREE.Mesh(
+                new THREE.BoxGeometry(2.2, 2.2, 0.1),
+                doorFrameMaterial
+            );
+            doorFrame.position.set(0, 1.1, 5.05);
+            houseGroup.add(doorFrame);
+            
+            house = houseGroup;
+            scene.add(house);
+        }
+        
+        function createInterior() {
+            // Floor inside house
+            const floorGeometry = new THREE.PlaneGeometry(5.8, 9.8);
+            const floorMaterial = new THREE.MeshLambertMaterial({ color: 0x8B7355 });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0.01, 0);
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Table
+            const tableGroup = new THREE.Group();
+            
+            const tableTopMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            const tableTop = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 0.1, 1),
+                tableTopMaterial
+            );
+            tableTop.position.y = 0.9;
+            tableTop.castShadow = true;
+            tableGroup.add(tableTop);
+            
+            const legMaterial = new THREE.MeshLambertMaterial({ color: 0x4A2511 });
+            const legPositions = [
+                [-0.6, 0.45, -0.4],
+                [0.6, 0.45, -0.4],
+                [-0.6, 0.45, 0.4],
+                [0.6, 0.45, 0.4]
+            ];
+            
+            legPositions.forEach(pos => {
+                const leg = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.05, 0.05, 0.9),
+                    legMaterial
+                );
+                leg.position.set(...pos);
+                leg.castShadow = true;
+                tableGroup.add(leg);
+            });
+            
+            tableGroup.position.set(0, 0, -2);
+            table = tableGroup;
+            scene.add(table);
+            
+            // Gift box
+            const boxGroup = new THREE.Group();
+            
+            const boxMaterial = new THREE.MeshLambertMaterial({ color: 0xFF1744 });
+            const boxBody = new THREE.Mesh(
+                new THREE.BoxGeometry(0.4, 0.4, 0.4),
+                boxMaterial
+            );
+            boxBody.castShadow = true;
+            boxGroup.add(boxBody);
+            
+            const lidMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+            const lid = new THREE.Mesh(
+                new THREE.BoxGeometry(0.42, 0.1, 0.42),
+                lidMaterial
+            );
+            lid.position.y = 0.25;
+            lid.castShadow = true;
+            boxGroup.add(lid);
+            giftBoxLid = lid;
+            
+            const ribbonMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+            const ribbon1 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.44, 0.05, 0.08),
+                ribbonMaterial
+            );
+            ribbon1.position.y = 0.025;
+            boxGroup.add(ribbon1);
+            
+            const ribbon2 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.05, 0.44),
+                ribbonMaterial
+            );
+            ribbon2.position.y = 0.025;
+            boxGroup.add(ribbon2);
+            
+            boxGroup.position.set(0, 1.15, -2);
+            giftBox = boxGroup;
+            scene.add(giftBox);
+        }
+        
+        function createReticle() {
+            const reticleGeometry = new THREE.RingGeometry(0.01, 0.02, 32);
+            const reticleMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff,
+                side: THREE.DoubleSide
+            });
+            reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
+            reticle.visible = false;
+            scene.add(reticle);
+        }
+        
+        function updateReticle() {
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            
+            reticle.position.copy(camera.position).add(direction.multiplyScalar(2));
+            reticle.lookAt(camera.position);
+            reticle.visible = true;
+        }
+        
+        function checkInteractions() {
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            
+            const raycaster = new THREE.Raycaster(camera.position, direction);
+            
+            // Check if looking at door
+            if (!isInside) {
+                const doorPosition = new THREE.Vector3(0, 1.5, 5);
+                const distanceToDoor = camera.position.distanceTo(doorPosition);
+                
+                if (distanceToDoor < 2 && camera.position.z > 3) {
+                    info.textContent = 'Gehe näher zur Tür! (WASD oder Pfeiltasten)';
+                    
+                    if (distanceToDoor < 1.5) {
+                        enterHouse();
+                    }
+                }
+            } else {
+                // Inside house - check for box interaction
+                if (giftBox && !boxOpened) {
+                    const intersects = raycaster.intersectObject(giftBox, true);
+                    
+                    if (intersects.length > 0) {
+                        info.textContent = 'Schaue auf die Box und warte...';
+                        
+                        // Auto-open after looking at it
+                        setTimeout(() => {
+                            if (!boxOpened) {
+                                openGiftBox();
+                            }
+                        }, 2000);
+                    }
+                }
+            }
+        }
+        
+        function enterHouse() {
+            isInside = true;
+            camera.position.set(0, 1.6, 2);
+            info.textContent = 'Schaue dich um und finde das Geschenk!';
+            
+            // Make outside walls invisible
+            if (house) {
+                house.children.forEach(child => {
+                    if (child.isMesh) {
+                        child.visible = false;
+                    }
+                });
+            }
+        }
+        
+        function openGiftBox() {
+            if (boxOpened) return;
+            boxOpened = true;
+            
+            // Animate lid opening
+            let lidY = 0.25;
+            const openInterval = setInterval(() => {
+                lidY += 0.02;
+                if (giftBoxLid) {
+                    giftBoxLid.position.y = lidY;
+                }
+                
+                if (lidY > 0.8) {
+                    clearInterval(openInterval);
+                    showGift();
+                }
+            }, 30);
+        }
+        
+        function showGift() {
+            // Create a glowing gift symbol
+            const giftSymbolGeometry = new THREE.SphereGeometry(0.2, 32, 32);
+            const giftSymbolMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xFFD700,
+                emissive: 0xFFD700,
+                emissiveIntensity: 2
+            });
+            const giftSymbol = new THREE.Mesh(giftSymbolGeometry, giftSymbolMaterial);
+            giftSymbol.position.set(0, 1.5, -2);
+            scene.add(giftSymbol);
+            
+            // Floating animation
+            let floatY = 1.5;
+            let floatDirection = 1;
+            setInterval(() => {
+                floatY += 0.01 * floatDirection;
+                if (floatY > 1.7 || floatY < 1.3) {
+                    floatDirection *= -1;
+                }
+                giftSymbol.position.y = floatY;
+                giftSymbol.rotation.y += 0.02;
+            }, 30);
+            
+            info.textContent = '🎁 Herzlichen Glückwunsch! Dein VR-Event wartet auf dich! 🎉';
+            info.style.fontSize = '20px';
+            info.style.background = 'rgba(0,0,0,0.7)';
+            info.style.padding = '20px';
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
+
