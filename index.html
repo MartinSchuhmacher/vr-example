@@ -65,6 +65,33 @@
         #vrButton:hover {
             background: #0b7dda;
         }
+
+        #vrButton:hover {
+            background: #0b7dda;
+        }
+
+        #godModeButton {
+            position: absolute;
+            bottom: 80px;
+            /* Above the VR button */
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #FF5722;
+            /* Deep Orange */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 150;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        #godModeButton:hover {
+            background: #E64A19;
+        }
     </style>
 </head>
 
@@ -72,6 +99,7 @@
     <div id="info">Schaue dich um und bewege dich zur Tür!</div>
 
     <button id="startButton">Erlebnis starten</button>
+    <button id="godModeButton">God Mode: OFF</button>
     <button id="vrButton">VR-Modus starten</button>
 
     <script type="importmap">
@@ -159,10 +187,13 @@
         let cyberOpened = false;
         let interactionMarker;
         let hoverState = { type: 'none', object: null, point: null };
+        let houses = [];
 
         const startButton = document.getElementById('startButton');
         const vrButton = document.getElementById('vrButton');
+        const godModeButton = document.getElementById('godModeButton');
         const info = document.getElementById('info');
+        let isGodMode = false;
 
         let isInit = false;
         startButton.addEventListener('click', () => {
@@ -312,6 +343,14 @@
             } else {
                 vrButton.style.display = 'block';
                 vrButton.textContent = 'Desktop Modus Aktiv';
+                vrButton.style.display = 'block';
+                vrButton.textContent = 'Desktop Modus Aktiv';
+                godModeButton.style.display = 'block';
+                godModeButton.addEventListener('click', () => {
+                    isGodMode = !isGodMode;
+                    godModeButton.textContent = isGodMode ? 'God Mode: ON' : 'God Mode: OFF';
+                    godModeButton.style.background = isGodMode ? '#4CAF50' : '#FF5722';
+                });
                 info.textContent = 'Nutze Maus (Klick+Ziehen) und WASD/Pfeile zum Bewegen';
             }
 
@@ -329,6 +368,7 @@
 
             createEnvironment();
             createVillage();
+            createDecorations();
             createReticle();
 
             setupDesktopControls();
@@ -404,12 +444,32 @@
             const positions = new Float32Array(particleCount * 3);
             for (let i = 0; i < particleCount * 3; i++) {
                 positions[i] = (Math.random() - 0.5) * 60;
-                if (i % 3 === 1) positions[i] = Math.random() * 10;
+                if (i % 3 === 1) positions[i] = 10 + Math.random() * 20; // Stars only high up (10-30 units)
             }
             particlesGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             const particlesMat = new THREE.PointsMaterial({ color: 0x00ffff, size: 0.2, transparent: true, opacity: 0.8 });
             const particles = new THREE.Points(particlesGeom, particlesMat);
             scene.add(particles);
+        }
+
+        function isPositionValid(x, z) {
+            for (let h of houses) {
+                // Convert (x,z) to House Local Space
+                const dx = x - h.x;
+                const dz = z - h.z;
+                // Rotate back by -h.rot
+                const cos = Math.cos(-h.rot);
+                const sin = Math.sin(-h.rot);
+                const lx = dx * cos - dz * sin;
+                const lz = dx * sin + dz * cos;
+                // House is roughly 4x4.
+                // 1. Inside House: +/- 2.5 margin
+                if (Math.abs(lx) < 2.5 && Math.abs(lz) < 2.5) return false;
+                // 2. In front of House (Door is at local z=2): Zone width 4, len 10
+                // Front means positive Z (where door is).
+                if (Math.abs(lx) < 2.5 && lz > 2 && lz < 12) return false;
+            }
+            return true;
         }
 
         function createVillage() {
@@ -419,7 +479,125 @@
             createHouse(-8, 0, -15, Math.PI / 3, true, false, false);
         }
 
+        function createDecorations() {
+            // 1. Neon Crystals / Spikes
+            const spikeGeom = new THREE.ConeGeometry(0.2, 1.5, 4);
+            const spikeMat = new THREE.MeshStandardMaterial({
+                color: 0xff00ff,
+                emissive: 0xff00ff,
+                emissiveIntensity: 1.5,
+                roughness: 0.1,
+                metalness: 0.8
+            });
+
+            for (let i = 0; i < 25; i++) {
+                const spike = new THREE.Mesh(spikeGeom, spikeMat);
+                // Random position around the map
+                const r = 10 + Math.random() * 30; // 10 to 40 radius
+                const theta = Math.random() * Math.PI * 2;
+                const x = r * Math.cos(theta);
+                const z = r * Math.sin(theta);
+
+                if (!isPositionValid(x, z)) continue;
+
+                spike.position.set(x, 0.75, z);
+                spike.rotation.x = (Math.random() - 0.5) * 0.5; // Slight tilt
+                spike.rotation.z = (Math.random() - 0.5) * 0.5;
+                scene.add(spike);
+                colliders.push(spike); // Make them solid
+            }
+
+            // 2. Low Poly Rocks
+            const rockGeom = new THREE.DodecahedronGeometry(1, 0); // Low poly
+            const rockMat = new THREE.MeshStandardMaterial({
+                color: 0x444444,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+
+            for (let i = 0; i < 20; i++) {
+                const rock = new THREE.Mesh(rockGeom, rockMat);
+                // Scatter, some near spawn
+                const x = (Math.random() - 0.5) * 60;
+                const z = (Math.random() - 0.5) * 60;
+
+                // Keep clear of direct start area (0,0,10)
+                if ((Math.abs(x) < 2 && Math.abs(z - 10) < 2) || !isPositionValid(x, z)) continue;
+
+                const s = 0.8 + Math.random() * 1.5;
+                rock.scale.set(s, s * 0.7, s);
+                rock.position.set(x, s * 0.3, z); // Partially buried
+                rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+
+                scene.add(rock);
+                colliders.push(rock);
+            }
+
+            // 3. Floating Cyber-Cubes nearby
+            const cubeGeom = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+            const cubeMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true });
+
+            for (let i = 0; i < 15; i++) {
+                const cube = new THREE.Mesh(cubeGeom, cubeMat);
+                // Near spawn area mostly
+                const x = (Math.random() - 0.5) * 20;
+                const z = 10 + (Math.random() - 0.5) * 20;
+
+                if (!isPositionValid(x, z)) continue;
+
+                cube.position.set(x, 1.5 + Math.random() * 3, z);
+                cube.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+                scene.add(cube);
+            }
+            createTrees();
+        }
+
+        function createTrees() {
+            const trunkGeom = new THREE.CylinderGeometry(0.2, 0.3, 1.5, 8);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5D4037, roughness: 0.9 }); // Brown
+            const leavesGeom = new THREE.ConeGeometry(1.5, 3, 8);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x1B5E20, roughness: 0.8 }); // Dark Green
+
+            for (let i = 0; i < 30; i++) {
+                const treeGroup = new THREE.Group();
+                const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+                trunk.position.y = 0.75; // Half of 1.5
+                trunk.castShadow = true;
+                trunk.receiveShadow = true;
+                treeGroup.add(trunk);
+                colliders.push(trunk);
+
+                const leaves = new THREE.Mesh(leavesGeom, leavesMat);
+                leaves.position.y = 2.25; // 1.5 + 1.5/2 = 2.25? No. trunk top at 1.5. cone 3 high. cone center at 1.5. So 1.5 + 1.5 = 3.0?
+                // Trunk height 1.5. Center at 0.75. Top at 1.5.
+                // Cone height 3. Center needs to be at 1.5 + 1.5 = 3. 
+                // Wait. Cone origin is center. 
+                leaves.position.y = 2.25;
+                leaves.castShadow = true;
+                leaves.receiveShadow = true;
+                treeGroup.add(leaves);
+
+                // Random placement, avoid spawn center
+                const r = 15 + Math.random() * 40; // 15 to 55 distance
+                const theta = Math.random() * Math.PI * 2;
+                const tx = r * Math.cos(theta);
+                const tz = r * Math.sin(theta);
+                if (!isPositionValid(tx, tz)) {
+                    i--; // Retry
+                    continue;
+                }
+                treeGroup.position.set(tx, 0, tz);
+
+                // Random scale
+                const s = 0.8 + Math.random() * 0.5;
+                treeGroup.scale.set(s, s, s);
+
+                scene.add(treeGroup);
+            }
+        }
+
         function createHouse(x, y, z, rotation, isMain, isSecret, isCyber) {
+            houses.push({ x: x, z: z, rot: rotation });
             const houseGroup = new THREE.Group();
             const wallMaterial = new THREE.MeshStandardMaterial({ map: textures.wood });
             const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
@@ -556,7 +734,9 @@
 
         function createSecretShelf(parentGroup) {
             const shelfGroup = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.5), new THREE.MeshStandardMaterial({ map: textures.wood, color: 0x888888 }));
+            // Make body a back panel so there is space inside
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.1), new THREE.MeshStandardMaterial({ map: textures.wood, color: 0x888888 }));
+            body.position.z = -0.2; // Move back
             shelfGroup.add(body);
 
             const doorGroup = new THREE.Group();
@@ -572,7 +752,7 @@
             const spriteMat = new THREE.SpriteMaterial({ map: textures.witcher });
             const witcherSprite = new THREE.Sprite(spriteMat);
             witcherSprite.scale.set(0.7, 1.4, 1);
-            witcherSprite.position.set(0, 0, 0.3);
+            witcherSprite.position.set(0, 0, 0.0); // Move back to 0.0 (was 0.3)
             witcherSprite.name = 'witcherSprite'; // Add name for access
             shelfGroup.add(witcherSprite);
 
@@ -1044,7 +1224,9 @@
                 }
                 const dir = new THREE.Vector3();
                 camera.getWorldDirection(dir);
-                dir.y = 0;
+                if (!isGodMode) {
+                    dir.y = 0; // Flatten movement if not flying
+                }
                 dir.normalize();
                 if (moveForward) {
                     userGroup.position.add(dir.multiplyScalar(0.08));
