@@ -65,29 +65,12 @@
         #vrButton:hover {
             background: #0b7dda;
         }
-
-        #clickMessage {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            padding: 10px 20px;
-            background: rgba(0, 0, 0, 0.7);
-            color: #00ff00;
-            font-size: 18px;
-            border: 1px solid #00ff00;
-            border-radius: 8px;
-            display: none;
-            z-index: 200;
-            pointer-events: none;
-            font-family: Arial, sans-serif;
-            text-shadow: 0 0 5px #00ff00;
-        }
     </style>
 </head>
 
 <body>
     <div id="info">Schaue dich um und bewege dich zur Tür!</div>
-    <div id="clickMessage">Maus geklickt</div>
+
     <button id="startButton">Erlebnis starten</button>
     <button id="vrButton">VR-Modus starten</button>
 
@@ -171,14 +154,22 @@
         let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
         let interactables = [];
+        let colliders = []; // Walls, etc.
         let giftBox, giftBoxLid, shelfDoor;
         let cyberOpened = false;
+        let interactionMarker;
+        let hoverState = { type: 'none', object: null, point: null };
 
         const startButton = document.getElementById('startButton');
         const vrButton = document.getElementById('vrButton');
         const info = document.getElementById('info');
 
-        startButton.addEventListener('click', init);
+        let isInit = false;
+        startButton.addEventListener('click', () => {
+            if (isInit) return;
+            isInit = true;
+            init();
+        });
 
         // texture generation
         const textures = {};
@@ -351,59 +342,42 @@
             });
         }
 
-        let hudMessageSprite = null;
-
         function onMouseClick() {
-            // 1. Visual Feedback
-            if (renderer.xr.isPresenting) {
-                // VR Mode: Show 3D HUD Message
-                if (!hudMessageSprite) {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 512; canvas.height = 128;
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                    ctx.fillRect(0, 0, 512, 128);
-                    ctx.strokeStyle = '#00ff00';
-                    ctx.lineWidth = 5;
-                    ctx.strokeRect(0, 0, 512, 128);
-                    ctx.font = '40px Arial';
-                    ctx.fillStyle = '#00ff00';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText("Maus geklickt", 256, 64);
-
-                    const tex = new THREE.CanvasTexture(canvas);
-                    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-                    hudMessageSprite = new THREE.Sprite(mat);
-                    // Attach to camera (HUD)
-                    // Position: Top Right (approx)
-                    hudMessageSprite.position.set(0.3, 0.2, -1);
-                    hudMessageSprite.scale.set(0.4, 0.1, 1);
-                    hudMessageSprite.renderOrder = 10000;
-                    camera.add(hudMessageSprite);
-                }
-
-                hudMessageSprite.visible = true;
-                if (hudMessageSprite.timeout) clearTimeout(hudMessageSprite.timeout);
-                hudMessageSprite.timeout = setTimeout(() => {
-                    hudMessageSprite.visible = false;
-                }, 1000);
-
-            } else {
-                // Desktop/Mobile Mode: DOM HTML
-                const msg = document.getElementById('clickMessage');
-                msg.style.display = 'block';
-                if (msg.timeout) clearTimeout(msg.timeout);
-                msg.timeout = setTimeout(() => {
-                    msg.style.display = 'none';
-                }, 1000);
-            }
-
-            // 2. Teleport
-            if (canTeleport && teleportMarker && teleportMarker.visible) {
+            if (hoverState.type === 'teleport' && canTeleport && teleportMarker.visible) {
                 const target = teleportMarker.position;
-                // Move UserGroup
                 userGroup.position.set(target.x, 0, target.z);
+            } else if (hoverState.type === 'interact') {
+                const object = hoverState.object;
+                const type = object.userData.type;
+                if (type === 'door') {
+                    // Remove door frame if linked
+                    if (object.userData.frame) {
+                        const frame = object.userData.frame;
+                        frame.visible = false;
+                        if (frame.parent) frame.parent.remove(frame);
+                        if (frame.geometry) frame.geometry.dispose();
+                        if (frame.material) frame.material.dispose();
+                    }
+                    // Remove door panel
+                    object.visible = false;
+                    object.scale.set(0, 0, 0); // Shrink to zero
+                    object.position.set(0, -1000, 0); // Teleport to hell
+                    if (object.parent) object.parent.remove(object);
+                    if (object.geometry) object.geometry.dispose();
+                    if (object.material) object.material.dispose();
+                    // Remove from interactables and colliders
+                    interactables = interactables.filter(o => o !== object);
+                    colliders = colliders.filter(o => o !== object);
+                    // Reset hover state to prevent double clicks
+                    hoverState = { type: 'none', object: null, point: null };
+                    interactionMarker.visible = false;
+                } else if (type === 'gift') {
+                    openGift();
+                } else if (type === 'shelf') {
+                    openShelf();
+                } else if (type === 'cyber') {
+                    openCyber(object);
+                }
             }
         }
 
@@ -419,7 +393,11 @@
             ground.receiveShadow = true;
             scene.add(ground);
 
+            scene.add(ground);
+
             createTeleportMarker();
+            createInteractionMarker();
+
 
             const particlesGeom = new THREE.BufferGeometry();
             const particleCount = 200;
@@ -446,20 +424,63 @@
             const wallMaterial = new THREE.MeshStandardMaterial({ map: textures.wood });
             const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
 
-            const mainBody = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), wallMaterial);
-            mainBody.position.y = 1.5;
-            mainBody.castShadow = true;
-            mainBody.receiveShadow = true;
-            houseGroup.add(mainBody);
+            // -- Hollow House Construction --
+            const wallThick = 0.2;
+            const houseW = 4;
+            const houseH = 3;
+            const houseD = 4;
 
+            const createWall = (w, h, d, px, py, pz) => {
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMaterial);
+                wall.position.set(px, py, pz);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                houseGroup.add(wall);
+                colliders.push(wall);
+                return wall;
+            };
+
+            // 1. Back Wall
+            createWall(houseW, houseH, wallThick, 0, houseH / 2, -houseD / 2 + wallThick / 2);
+
+            // 2. Side Walls (fitting between front/back faces effectively, or just inside)
+            // Let's make sides fit between front Z and back Z extents logic
+            const sideD = houseD - 2 * wallThick;
+            createWall(wallThick, houseH, sideD, -(houseW / 2 - wallThick / 2), houseH / 2, 0); // Left
+            createWall(wallThick, houseH, sideD, (houseW / 2 - wallThick / 2), houseH / 2, 0);  // Right
+
+            // 3. Front Wall segments (with door gap)
+            const doorW = 1.6;
+            const doorH = 2.2;
+            const frontSideW = (houseW - doorW) / 2; // 1.2
+
+            // Front Left
+            createWall(frontSideW, houseH, wallThick, -(houseW / 2 - frontSideW / 2), houseH / 2, houseD / 2 - wallThick / 2);
+            // Front Right
+            createWall(frontSideW, houseH, wallThick, (houseW / 2 - frontSideW / 2), houseH / 2, houseD / 2 - wallThick / 2);
+            // Front Header
+            const headerH = houseH - doorH;
+            createWall(doorW, headerH, wallThick, 0, doorH + headerH / 2, houseD / 2 - wallThick / 2);
+
+            // Roof
             const roof = new THREE.Mesh(new THREE.ConeGeometry(3.5, 2, 4), darkMaterial);
             roof.position.y = 4;
             roof.rotation.y = Math.PI / 4;
             houseGroup.add(roof);
 
+            // Door Frame (Visual Only)
             const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.2, 0.2), new THREE.MeshBasicMaterial({ map: textures.neon }));
             doorFrame.position.set(0, 1.1, 2.01);
             houseGroup.add(doorFrame);
+
+            // Create actual door panel (removable)
+            const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.0, 0.1), new THREE.MeshStandardMaterial({ map: textures.wood, color: 0x664422 }));
+            doorPanel.position.set(0, 1.0, 2.01);
+            doorPanel.userData = { type: 'door', frame: doorFrame };
+            houseGroup.add(doorPanel);
+
+            interactables.push(doorPanel);
+            colliders.push(doorPanel);
 
             if (isMain) {
                 createTableAndGift(houseGroup);
@@ -615,82 +636,112 @@
             scene.add(teleportMarker);
         }
 
+        function createInteractionMarker() {
+            const group = new THREE.Group();
+            // Hand Sprite
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.font = '80px Arial';
+            ctx.fillStyle = '#ffff00';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = "#ffff00";
+            ctx.shadowBlur = 10;
+            ctx.fillText('👆', 64, 64);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(0.5, 0.5, 1);
+            group.add(sprite);
+
+            interactionMarker = group;
+            interactionMarker.visible = false;
+            scene.add(interactionMarker);
+        }
+
 
 
         function checkInteractions() {
             const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera({ x: 0, y: 0 }, camera);
-            raycaster.far = 10;
-
-            // Teleport Check
-            if (ground) {
-                const intersectGround = raycaster.intersectObject(ground);
-                if (intersectGround.length > 0) {
-                    const point = intersectGround[0].point;
-                    const camWorldPos = new THREE.Vector3();
-                    camera.getWorldPosition(camWorldPos);
-                    const distance = point.distanceTo(camWorldPos);
-
-                    // Reduced valid distance (approx 25% less than 10 -> around 7.5 max)
-                    if (distance < 7.5) {
-                        teleportMarker.position.copy(point);
-                        teleportMarker.position.y += 0.05; // Lift up to avoid flickering
-                        teleportMarker.visible = true;
-                        canTeleport = true;
-                    } else {
-                        teleportMarker.visible = false;
-                        canTeleport = false;
-                    }
-                } else {
-                    if (teleportMarker) teleportMarker.visible = false;
-                    canTeleport = false;
-                }
-            }
-
-            const lookDir = new THREE.Vector3();
-            camera.getWorldDirection(lookDir);
-            // Reticle logic needs to respect userGroup if needed, but WorldDirection is global
-            // Reticle is child of scene.
-            const reticlePos = new THREE.Vector3();
-            reticlePos.copy(camera.position).add(lookDir.multiplyScalar(2));
-            // camera.position is in local space if parented?
-            // Wait, if camera is in userGroup, camera.position is local.
-            // We need world position for raycaster and reticle.
-
             const camWorldPos = new THREE.Vector3();
             camera.getWorldPosition(camWorldPos);
+            const lookDir = new THREE.Vector3();
+            camera.getWorldDirection(lookDir);
 
-            raycaster.set(camWorldPos, lookDir); // Set manually with World Pos and Dir
+            raycaster.set(camWorldPos, lookDir);
+            raycaster.far = 20;
 
-            reticle.position.copy(camWorldPos).add(lookDir.multiplyScalar(2));
-            reticle.lookAt(camWorldPos);
+            // Reset State
+            hoverState = { type: 'none', object: null, point: null };
+            teleportMarker.visible = false;
+            canTeleport = false;
+            interactionMarker.visible = false;
+            reticle.material.color.setHex(0xffffff);
 
-            const intersects = raycaster.intersectObjects(interactables);
+            // Raycast against EVERYTHING that matters
+            const allObjects = [...interactables, ...colliders, ground];
+            const intersects = raycaster.intersectObjects(allObjects);
 
             if (intersects.length > 0) {
-                const object = intersects[0].object;
-                const type = object.userData.type;
-                reticle.material.color.setHex(0xff0000);
-                const dist = intersects[0].distance;
+                const hit = intersects[0];
+                const object = hit.object;
+                const distance = hit.distance; // Distance from camera
 
-                if (dist < 4.0) {
-                    if (type === 'gift' && !boxOpened) {
-                        info.textContent = "Geschenk gefunden! Es öffnet sich...";
-                        openGift();
-                    } else if (type === 'shelf' && !shelfOpened) {
-                        info.textContent = "Geheimnis entdeckt...";
-                        openShelf();
-                    } else if (type === 'cyber' && !cyberOpened) {
-                        info.textContent = "System wird gehackt...";
-                        openCyber(object);
+                // 1. Hit a Collider (Wall) first? -> Block everything
+                if (colliders.includes(object)) {
+                    // Check if it is a door (which is also a collider)
+                    if (object.userData.type === 'door' && distance < 5.0) {
+                        // It's a door in range
+                        interactionMarker.position.copy(hit.point);
+                        interactionMarker.lookAt(camera.position); // Billboard
+                        interactionMarker.visible = true;
+                        hoverState = { type: 'interact', object: object };
+                        reticle.material.color.setHex(0xffff00);
+                        info.textContent = "Klicken zum Öffnen";
+                    } else {
+                        // It's a wall or far door -> Block
+                        reticle.material.color.setHex(0xffffff);
+                        info.textContent = "";
                     }
-                } else {
-                    info.textContent = "Geh näher ran!";
                 }
-            } else {
-                reticle.material.color.setHex(0xffffff);
-                info.textContent = isMobile ? "Bewege dein Handy und tippe zum Laufen" : "Suche in den Häusern!";
+                // 2. Hit an Interactable (Interactable includes Door, but Door was handled above if in colliders. 
+                //    Wait, Door is in BOTH. intersectObjects returns it once. 
+                //    If logic above handles 'door' inside colliders check, we are good.
+                //    What if it's a gift box? Gift box is NOT in colliders, so it falls here.
+                else if (interactables.includes(object)) {
+                    if (distance < 5.0) {
+                        if ((object.userData.type === 'gift' && !boxOpened) ||
+                            (object.userData.type === 'shelf' && !shelfOpened) ||
+                            (object.userData.type === 'cyber' && !cyberOpened)) {
+                            interactionMarker.position.copy(hit.point);
+                            interactionMarker.visible = true;
+                            hoverState = { type: 'interact', object: object };
+                            reticle.material.color.setHex(0xffff00);
+                            info.textContent = "Klicken zum Interagieren";
+                        }
+                    }
+                }
+                // 3. Hit Ground? -> Teleport
+                else if (object === ground) {
+                    // Reduce max distance logic
+                    if (distance < 7.5) {
+                        teleportMarker.position.copy(hit.point);
+                        teleportMarker.position.y += 0.05;
+                        teleportMarker.visible = true;
+                        canTeleport = true;
+                        hoverState = { type: 'teleport', point: hit.point };
+                        reticle.material.color.setHex(0x00ff00);
+                    }
+                }
             }
+
+            // Update Reticle Position
+            const reticlePos = new THREE.Vector3();
+            reticlePos.copy(camWorldPos).add(lookDir.multiplyScalar(2));
+            reticle.position.copy(reticlePos);
+            reticle.lookAt(camWorldPos);
         }
 
         function openGift() {
