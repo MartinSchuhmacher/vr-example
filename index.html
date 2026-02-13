@@ -178,6 +178,7 @@
         let canTeleport = false;
         let boxOpened = false;
         let shelfOpened = false;
+        let mazeBoxOpened = false;
         let vrSupported = false;
         let isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
@@ -343,8 +344,6 @@
             } else {
                 vrButton.style.display = 'block';
                 vrButton.textContent = 'Desktop Modus Aktiv';
-                vrButton.style.display = 'block';
-                vrButton.textContent = 'Desktop Modus Aktiv';
                 godModeButton.style.display = 'block';
                 godModeButton.addEventListener('click', () => {
                     isGodMode = !isGodMode;
@@ -369,6 +368,7 @@
             createEnvironment();
             createVillage();
             createDecorations();
+            createMaze();
             createReticle();
 
             setupDesktopControls();
@@ -417,12 +417,14 @@
                     openShelf();
                 } else if (type === 'cyber') {
                     openCyber(object);
+                } else if (type === 'mazeBox') {
+                    openMazeBox(object);
                 }
             }
         }
 
         function createEnvironment() {
-            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const groundGeometry = new THREE.PlaneGeometry(300, 300);
             const groundMaterial = new THREE.MeshStandardMaterial({
                 map: textures.floor,
                 roughness: 0.2,
@@ -468,7 +470,15 @@
                 // 2. In front of House (Door is at local z=2): Zone width 4, len 10
                 // Front means positive Z (where door is).
                 if (Math.abs(lx) < 2.5 && lz > 2 && lz < 12) return false;
+                if (Math.abs(lx) < 2.5 && lz > 2 && lz < 12) return false;
             }
+
+            // Maze Protection
+            // Maze Bounds (approx): X[-48, 48], Z[-118, -22]
+            // Entrance Area: X[-5, 5], Z[-22, -10]
+            if (z < -22 && z > -120 && Math.abs(x) < 50) return false; // Inside Maze
+            if (z < -10 && z >= -22 && Math.abs(x) < 8) return false; // Maze Entrance
+
             return true;
         }
 
@@ -594,6 +604,190 @@
 
                 scene.add(treeGroup);
             }
+        }
+
+        function createMaze() {
+            // Maze parameters
+            const mazeW = 31;
+            const mazeH = 31;
+            const cellSize = 3; // Wall length
+            const wallHeight = 4;
+            const startZ = -70; // Center of maze
+            const startX = 0;
+
+            // Grid initialization (1 = Wall, 0 = Path)
+            const grid = [];
+            for (let y = 0; y < mazeH; y++) {
+                const row = [];
+                for (let x = 0; x < mazeW; x++) {
+                    row.push(1);
+                }
+                grid.push(row);
+            }
+
+            // Maze generation (DFS)
+            const stack = [];
+            const startNode = { x: 1, y: 1 };
+            grid[1][1] = 0;
+            stack.push(startNode);
+
+            while (stack.length > 0) {
+                const current = stack[stack.length - 1];
+                const neighbors = [];
+                // Check dist 2 neighbors
+                const dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]];
+                for (let d of dirs) {
+                    const ny = current.y + d[0];
+                    const nx = current.x + d[1];
+                    if (ny > 0 && ny < mazeH - 1 && nx > 0 && nx < mazeW - 1 && grid[ny][nx] === 1) {
+                        neighbors.push({ x: nx, y: ny, dx: d[1] / 2, dy: d[0] / 2 });
+                    }
+                }
+
+                if (neighbors.length > 0) {
+                    const chosen = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    // Knock down wall between
+                    grid[current.y + chosen.dy][current.x + chosen.dx] = 0;
+                    grid[chosen.y][chosen.x] = 0;
+                    stack.push({ x: chosen.x, y: chosen.y });
+                } else {
+                    stack.pop();
+                }
+            }
+
+            // Clear Center Room (3x3 roughly)
+            const cx = Math.floor(mazeW / 2);
+            const cy = Math.floor(mazeH / 2);
+            for (let y = cy - 1; y <= cy + 1; y++) {
+                for (let x = cx - 1; x <= cx + 1; x++) {
+                    grid[y][x] = 0;
+                }
+            }
+
+            // Create Entrance (at max Z, which is nearest to village, since Z increases 'down' in array indices typically? 
+            // Wait, standard loop y=0 to mazeH. 
+            // wz = (y - mazeH/2) * cellSize + startZ.
+            // If startZ = -70.
+            // y=0 -> wz = -10.5*3 - 70 = -100.
+            // y=20 -> wz = 10.5*3 - 70 = -38.
+            // Village at -15.
+            // So y=20 is closest to village.
+            grid[mazeH - 2][Math.floor(mazeW / 2)] = 0;
+            grid[mazeH - 1][Math.floor(mazeW / 2)] = 0;
+
+            // Build Meshes
+            const wallMat = new THREE.MeshStandardMaterial({
+                color: 0x555555,
+                roughness: 0.9,
+                map: textures.floor // Reuse floor texture for concrete feel
+            });
+
+            const mazeGroup = new THREE.Group();
+
+            for (let y = 0; y < mazeH; y++) {
+                for (let x = 0; x < mazeW; x++) {
+                    // World Position
+                    const wx = (x - mazeW / 2) * cellSize + startX;
+                    const wz = (y - mazeH / 2) * cellSize + startZ;
+
+                    if (grid[y][x] === 1) {
+                        const wall = new THREE.Mesh(new THREE.BoxGeometry(cellSize, wallHeight, cellSize), wallMat);
+                        wall.position.set(wx, wallHeight / 2, wz);
+                        wall.castShadow = true;
+                        wall.receiveShadow = true;
+                        mazeGroup.add(wall);
+                        colliders.push(wall);
+                    }
+                }
+            }
+            scene.add(mazeGroup);
+
+            // Add roof to cover maze from above
+            const mazeWidth = mazeW * cellSize;
+            const mazeDepth = mazeH * cellSize;
+            const roofGeometry = new THREE.PlaneGeometry(mazeWidth, mazeDepth);
+            const roofMaterial = new THREE.MeshStandardMaterial({
+                color: 0x222222,
+                roughness: 0.8,
+                side: THREE.DoubleSide
+            });
+            const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+            roof.rotation.x = -Math.PI / 2; // Horizontal
+            roof.position.set(startX, wallHeight, startZ);
+            roof.receiveShadow = true;
+            scene.add(roof);
+
+            // Add ambient lighting inside maze
+            const mazeLight = new THREE.PointLight(0x8888ff, 2, mazeWidth);
+            mazeLight.position.set(startX, wallHeight / 2, startZ);
+            scene.add(mazeLight);
+
+            // Place Box in center
+            // Convert center index to world coords
+            const centerWx = (cx - mazeW / 2) * cellSize + startX;
+            const centerWz = (cy - mazeH / 2) * cellSize + startZ;
+            createMazeBox(centerWx, centerWz);
+        }
+
+        function createMazeBox(x, z) {
+            const boxGroup = new THREE.Group();
+            const boxMat = new THREE.MeshStandardMaterial({ color: 0xaa00aa, roughness: 0.4 });
+            const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.8), boxMat);
+            boxGroup.add(box);
+
+
+            const lid = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.15, 0.9), new THREE.MeshStandardMaterial({ color: 0xff00ff }));
+            lid.position.y = 0.35;
+            boxGroup.add(lid);
+
+            boxGroup.position.set(x, 0.3, z);
+            scene.add(boxGroup);
+
+            // Interaction
+            // We need a hit target. Let's make the box AND the lid the target.
+            const userData = { type: 'mazeBox', parent: boxGroup, lid: lid };
+            box.userData = userData;
+            lid.userData = userData;
+
+            interactables.push(box);
+            interactables.push(lid);
+            colliders.push(box);
+        }
+
+        function openMazeBox(boxObj) {
+            if (mazeBoxOpened) return;
+            mazeBoxOpened = true;
+
+            const lid = boxObj.userData.lid;
+            const boxGroup = boxObj.userData.parent;
+
+            // Create a hinge group at the edge of the lid
+            const hingeGroup = new THREE.Group();
+            hingeGroup.position.set(0, 0.35, -0.45); // Position at back edge of lid
+            boxGroup.add(hingeGroup);
+
+            // Move lid to hinge group and adjust its local position
+            boxGroup.remove(lid);
+            lid.position.set(0, 0, 0.45); // Offset from hinge
+            hingeGroup.add(lid);
+
+            let angle = 0;
+            const targetAngle = Math.PI / 2; // 90 degrees
+
+            const anim = setInterval(() => {
+                angle += 0.05;
+                hingeGroup.rotation.x = -angle; // Rotate around X axis (hinge)
+
+                if (angle >= targetAngle) {
+                    clearInterval(anim);
+                    hingeGroup.rotation.x = -targetAngle;
+                    // Shows nothing for now.
+                    info.textContent = "Leer... für den Moment.";
+
+                    // Show a message
+                    setTimeout(() => { info.textContent = ""; }, 3000);
+                }
+            }, 20);
         }
 
         function createHouse(x, y, z, rotation, isMain, isSecret, isCyber) {
@@ -894,7 +1088,8 @@
                     if (distance < 5.0) {
                         if ((object.userData.type === 'gift' && !boxOpened) ||
                             (object.userData.type === 'shelf' && !shelfOpened) ||
-                            (object.userData.type === 'cyber' && !cyberOpened)) {
+                            (object.userData.type === 'cyber' && !cyberOpened) ||
+                            (object.userData.type === 'mazeBox' && !mazeBoxOpened)) {
                             interactionMarker.position.copy(hit.point);
                             interactionMarker.visible = true;
                             hoverState = { type: 'interact', object: object };
@@ -1236,6 +1431,25 @@
                 }
             }
             checkInteractions();
+
+            // Fog Logic
+            const pos = userGroup.position;
+            // Maze Bounds (approximate)
+            // Center Z = -70. Size = 31*3 = 93. Half = 46.5.
+            // Z Range: [-116.5, -23.5].
+            // X Range: [-46.5, 46.5].
+            if (pos.z < -20 && pos.z > -120 && Math.abs(pos.x) < 48) {
+                // Inside Maze
+                if (!(scene.fog instanceof THREE.Fog)) {
+                    scene.fog = new THREE.Fog(0x050510, 2, 20);
+                }
+            } else {
+                // Outside Maze
+                if (!(scene.fog instanceof THREE.FogExp2)) {
+                    scene.fog = new THREE.FogExp2(0x050510, 0.02);
+                }
+            }
+
             renderer.render(scene, camera);
         }
 
